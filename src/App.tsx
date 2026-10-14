@@ -109,12 +109,17 @@ function BottomNavigation({ active, onChange }: { active: Tab; onChange: (tab: T
 
   return (
     <nav className="bottom-nav" aria-label="Navegação principal">
+      <span className="nav-section-label">Menu principal</span>
       {items.map(({ tab, label, icon: Icon }) => (
         <button key={tab} className={active === tab ? 'active' : ''} onClick={() => onChange(tab)}>
           <Icon size={21} />
           <span>{label}</span>
         </button>
       ))}
+      <div className="sidebar-note">
+        <Shield size={18} />
+        <span><strong>Projeto comunitário</strong><small>Dados transparentes e responsáveis</small></span>
+      </div>
     </nav>
   )
 }
@@ -748,11 +753,24 @@ export default function App() {
     showToast('Dados locais removidos')
   }
 
+  const tabTitles: Record<Tab, string> = {
+    inicio: 'Visão geral',
+    mapa: 'Mapa de atenção',
+    relatar: 'Novo relato',
+    emergencia: 'Central de ajuda',
+    perfil: 'Preferências'
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <Brand />
+        <div className="desktop-page-title">
+          <span>Central comunitária</span>
+          <strong>{tabTitles[tab]}</strong>
+        </div>
         <div className="top-actions">
+          <span className="desktop-online"><i /> Sistema operacional</span>
           {installPrompt && <button className="install-mini" onClick={install}><Download size={17} /><span>Instalar</span></button>}
           <button className="icon-button" onClick={() => setTab('perfil')} aria-label="Abrir configurações"><Menu size={21} /></button>
         </div>
