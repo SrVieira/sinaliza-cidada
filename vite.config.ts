@@ -28,10 +28,10 @@ export default defineConfig({
         navigateFallback: '/index.html',
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.tile\.openstreetmap\.org\/.*/i,
-            handler: 'CacheFirst',
+            urlPattern: /^https:\/\/(?:[abc]\.)?tile\.openstreetmap\.org\/.*/i,
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'osm-map-tiles',
+              cacheName: 'osm-map-tiles-v2',
               expiration: { maxEntries: 180, maxAgeSeconds: 60 * 60 * 24 * 7 }
             }
           }

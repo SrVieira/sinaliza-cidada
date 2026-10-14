@@ -161,6 +161,56 @@ p { line-height: 1.5; }
 .map-view { padding: 0 0 112px; background: #e9e6de; }
 .map-stage { height: 57vh; min-height: 420px; position: relative; overflow: hidden; }
 .map-canvas { width: 100%; height: 100%; background: #d8dfda; }
+.map-location-gate {
+  width: 100%;
+  height: 100%;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(111, 208, 180, .2), transparent 22%),
+    linear-gradient(145deg, #dfe9e5, #cddbd6);
+}
+.map-location-gate > span {
+  width: 62px;
+  height: 62px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(23, 105, 94, .16);
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 253, 249, .8);
+  color: var(--green);
+  box-shadow: 0 12px 28px rgba(20, 49, 43, .1);
+}
+.map-location-gate h2 { font-size: 23px; }
+.map-location-gate > p:last-child { max-width: 340px; margin: 9px 0 0; color: #62736e; font-size: 11px; }
+.map-tile-status {
+  position: absolute;
+  z-index: 490;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100% - 40px);
+  padding: 11px 15px;
+  border: 1px solid rgba(16, 46, 42, .12);
+  border-radius: 24px;
+  background: rgba(255, 253, 249, .94);
+  color: var(--ink);
+  box-shadow: 0 10px 28px rgba(20, 49, 43, .15);
+  backdrop-filter: blur(10px);
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.map-tile-status.failed { color: #9e3028; }
+.spin { animation: map-spin .9s linear infinite; }
 .leaflet-control-attribution { font-size: 8px !important; }
 .map-search { position: absolute; z-index: 500; top: 17px; left: 16px; right: 16px; height: 50px; border: 1px solid rgba(14,46,41,.12); background: rgba(255,253,249,.96); backdrop-filter: blur(10px); box-shadow: 0 10px 28px rgba(20,49,43,.15); border-radius: 16px; padding: 0 8px 0 14px; display: grid; grid-template-columns: auto 1fr 38px; align-items: center; gap: 9px; }
 .map-search input { height: 100%; border: 0; background: transparent; outline: 0; color: var(--ink); font-size: 13px; min-width: 0; }
@@ -262,6 +312,7 @@ textarea:focus, .contact-form input:focus { border-color: var(--green); box-shad
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes map-spin { to { transform: rotate(360deg); } }
 
 @media (min-width: 720px) {
   body { padding: 26px 0; background: radial-gradient(circle at 20% 15%, #d5e1dc, transparent 25%), #e8e5dd; }

@@ -8,6 +8,7 @@ import {
   Download,
   Home,
   Info,
+  LoaderCircle,
   LocateFixed,
   Map as MapIcon,
   MapPin,
@@ -141,47 +142,63 @@ function SafetyMap({
   selectedEvent: string | null
   onSelectEvent: (id: string) => void
 }) {
+  const [tilesReady, setTilesReady] = useState(false)
+  const [tileFailed, setTileFailed] = useState(false)
+
   return (
-    <MapContainer center={center} zoom={14} zoomControl={false} className="map-canvas">
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <RecenterMap center={center} />
-      {events.map((event) => (
-        <CircleMarker
-          key={event.id}
-          center={[event.lat, event.lng]}
-          radius={selectedEvent === event.id ? 13 : 9}
-          pathOptions={{
-            color: '#fff',
-            weight: 3,
-            fillColor: riskColors[event.level],
-            fillOpacity: 0.95
+    <>
+      <MapContainer center={center} zoom={14} zoomControl={false} className="map-canvas">
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          eventHandlers={{
+            loading: () => setTilesReady(false),
+            load: () => { setTilesReady(true); setTileFailed(false) },
+            tileerror: () => setTileFailed(true)
           }}
-          eventHandlers={{ click: () => onSelectEvent(event.id) }}
-        >
-          <Popup>
-            <div className="map-popup">
-              <RiskBadge level={event.level} />
-              <strong>{event.title}</strong>
-              <p>{event.detail}</p>
-              <small>{event.source} · confiança {event.confidence}</small>
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
-      {userLocation && (
-        <>
-          <Circle center={userLocation} radius={110} pathOptions={{ color: '#16695d', fillOpacity: 0.08, weight: 1 }} />
-          <CircleMarker center={userLocation} radius={8} pathOptions={{ color: '#fff', weight: 4, fillColor: '#16695d', fillOpacity: 1 }} />
-        </>
+        />
+        <RecenterMap center={center} />
+        {events.map((event) => (
+          <CircleMarker
+            key={event.id}
+            center={[event.lat, event.lng]}
+            radius={selectedEvent === event.id ? 13 : 9}
+            pathOptions={{
+              color: '#fff',
+              weight: 3,
+              fillColor: riskColors[event.level],
+              fillOpacity: 0.95
+            }}
+            eventHandlers={{ click: () => onSelectEvent(event.id) }}
+          >
+            <Popup>
+              <div className="map-popup">
+                <RiskBadge level={event.level} />
+                <strong>{event.title}</strong>
+                <p>{event.detail}</p>
+                <small>{event.source} · confiança {event.confidence}</small>
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
+        {userLocation && (
+          <>
+            <Circle center={userLocation} radius={110} pathOptions={{ color: '#16695d', fillOpacity: 0.08, weight: 1 }} />
+            <CircleMarker center={userLocation} radius={8} pathOptions={{ color: '#fff', weight: 4, fillColor: '#16695d', fillOpacity: 1 }} />
+          </>
+        )}
+        {destination && <Marker position={destination} icon={markerIcon} />}
+        {routePoints.length > 1 && (
+          <Polyline positions={routePoints} pathOptions={{ color: '#102e2a', weight: 6, opacity: 0.82, lineCap: 'round' }} />
+        )}
+      </MapContainer>
+      {!tilesReady && (
+        <div className={`map-tile-status ${tileFailed ? 'failed' : ''}`}>
+          {tileFailed ? <WifiOff size={18} /> : <LoaderCircle size={18} className="spin" />}
+          <span>{tileFailed ? 'Não foi possível carregar o mapa. Verifique sua conexão.' : 'Carregando o mapa…'}</span>
+        </div>
       )}
-      {destination && <Marker position={destination} icon={markerIcon} />}
-      {routePoints.length > 1 && (
-        <Polyline positions={routePoints} pathOptions={{ color: '#102e2a', weight: 6, opacity: 0.82, lineCap: 'round' }} />
-      )}
-    </MapContainer>
+    </>
   )
 }
 
@@ -189,14 +206,12 @@ function HomeView({
   events,
   online,
   userLocation,
-  locate,
   setTab,
   openSos
 }: {
   events: SafetyEvent[]
   online: boolean
   userLocation: Coordinates | null
-  locate: () => void
   setTab: (tab: Tab) => void
   openSos: () => void
 }) {
@@ -213,11 +228,11 @@ function HomeView({
         <p className="hero-copy">
           A região apresenta <strong>atenção moderada</strong> neste momento. Consulte os sinais antes de sair.
         </p>
-        <button className="location-row" onClick={locate}>
+        <button className="location-row" onClick={() => setTab('mapa')}>
           <span className="location-icon"><LocateFixed size={19} /></span>
           <span>
             <small>Sua localização</small>
-            <strong>{userLocation ? 'Localização aproximada ativa' : 'Toque para localizar você'}</strong>
+            <strong>{userLocation ? 'Ver minha posição no mapa' : 'Abrir mapa e permitir localização'}</strong>
           </span>
           <ChevronRight size={19} />
         </button>
@@ -273,11 +288,15 @@ function HomeView({
 function MapView({
   events,
   userLocation,
+  isLocating,
+  locationAttempted,
   locate,
   showToast
 }: {
   events: SafetyEvent[]
   userLocation: Coordinates | null
+  isLocating: boolean
+  locationAttempted: boolean
   locate: () => void
   showToast: (message: string) => void
 }) {
@@ -289,6 +308,13 @@ function MapView({
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null)
   const [filter, setFilter] = useState<'todos' | RiskLevel>('todos')
   const mapCenter = userLocation ?? DEFAULT_CENTER
+  const waitingForLocation = !userLocation && (!locationAttempted || isLocating)
+
+  useEffect(() => {
+    if (!userLocation && !locationAttempted && !isLocating) {
+      locate()
+    }
+  }, [isLocating, locate, locationAttempted, userLocation])
 
   const visibleEvents = useMemo(
     () => (filter === 'todos' ? events : events.filter((event) => event.level === filter)),
@@ -322,29 +348,40 @@ function MapView({
   return (
     <main className="view map-view">
       <div className="map-stage">
-        <SafetyMap
-          events={visibleEvents}
-          center={destination ?? mapCenter}
-          userLocation={userLocation}
-          destination={destination}
-          routePoints={routePoints}
-          selectedEvent={selectedEvent}
-          onSelectEvent={setSelectedEvent}
-        />
-        <form className="map-search" onSubmit={searchDestination}>
-          <Search size={19} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Para onde você vai?" aria-label="Destino" />
-          <button type="submit" disabled={searching}>{searching ? '...' : <Navigation size={18} />}</button>
-        </form>
-        <button className="locate-map" onClick={locate} aria-label="Usar minha localização"><LocateFixed size={21} /></button>
-        <div className="map-filters">
-          {(['todos', 'baixo', 'moderado', 'elevado'] as const).map((item) => (
-            <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>
-              {item === 'todos' ? 'Todos' : item}
-            </button>
-          ))}
-        </div>
-        <div className="map-legend"><span><i className="low" />Baixa</span><span><i className="medium" />Moderada</span><span><i className="high" />Elevada</span></div>
+        {waitingForLocation ? (
+          <div className="map-location-gate">
+            <span><LoaderCircle size={29} className="spin" /></span>
+            <p className="eyebrow">Preparando seu mapa</p>
+            <h2>Encontrando sua localização…</h2>
+            <p>Usamos a posição somente para centralizar o mapa e ela não é publicada.</p>
+          </div>
+        ) : (
+          <>
+            <SafetyMap
+              events={visibleEvents}
+              center={destination ?? mapCenter}
+              userLocation={userLocation}
+              destination={destination}
+              routePoints={routePoints}
+              selectedEvent={selectedEvent}
+              onSelectEvent={setSelectedEvent}
+            />
+            <form className="map-search" onSubmit={searchDestination}>
+              <Search size={19} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Para onde você vai?" aria-label="Destino" />
+              <button type="submit" disabled={searching}>{searching ? '...' : <Navigation size={18} />}</button>
+            </form>
+            <button className="locate-map" onClick={locate} aria-label="Usar minha localização"><LocateFixed size={21} /></button>
+            <div className="map-filters">
+              {(['todos', 'baixo', 'moderado', 'elevado'] as const).map((item) => (
+                <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>
+                  {item === 'todos' ? 'Todos' : item}
+                </button>
+              ))}
+            </div>
+            <div className="map-legend"><span><i className="low" />Baixa</span><span><i className="medium" />Moderada</span><span><i className="high" />Elevada</span></div>
+          </>
+        )}
       </div>
 
       <section className="route-summary">
@@ -664,6 +701,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('inicio')
   const [online, setOnline] = useState(navigator.onLine)
   const [userLocation, setUserLocation] = useState<Coordinates | null>(null)
+  const [isLocating, setIsLocating] = useState(false)
+  const [locationAttempted, setLocationAttempted] = useState(false)
   const [localReports, setLocalReports] = useState<SafetyEvent[]>(getLocalReports)
   const [contacts, setContactsState] = useState<TrustedContact[]>(getContacts)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null)
@@ -696,15 +735,23 @@ export default function App() {
 
   function locate() {
     if (!navigator.geolocation) {
+      setLocationAttempted(true)
       showToast('Geolocalização não disponível neste aparelho')
       return
     }
+    setIsLocating(true)
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setUserLocation([position.coords.latitude, position.coords.longitude])
+        setLocationAttempted(true)
+        setIsLocating(false)
         showToast('Localização aproximada atualizada')
       },
-      () => showToast('Permita o acesso à localização nas configurações do navegador'),
+      () => {
+        setLocationAttempted(true)
+        setIsLocating(false)
+        showToast('Permita o acesso à localização nas configurações do navegador')
+      },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     )
   }
@@ -776,8 +823,8 @@ export default function App() {
         </div>
       </header>
 
-      {tab === 'inicio' && <HomeView events={events} online={online} userLocation={userLocation} locate={locate} setTab={setTab} openSos={() => setSosOpen(true)} />}
-      {tab === 'mapa' && <MapView events={events} userLocation={userLocation} locate={locate} showToast={showToast} />}
+      {tab === 'inicio' && <HomeView events={events} online={online} userLocation={userLocation} setTab={setTab} openSos={() => setSosOpen(true)} />}
+      {tab === 'mapa' && <MapView events={events} userLocation={userLocation} isLocating={isLocating} locationAttempted={locationAttempted} locate={locate} showToast={showToast} />}
       {tab === 'relatar' && <ReportView userLocation={userLocation} locate={locate} onSubmit={addReport} />}
       {tab === 'emergencia' && <EmergencyView userLocation={userLocation} locate={locate} contacts={contacts} openSos={() => setSosOpen(true)} shareLocation={shareLocation} />}
       {tab === 'perfil' && <ProfileView contacts={contacts} setContacts={setContacts} canInstall={Boolean(installPrompt)} install={install} clearData={clearData} showToast={showToast} />}

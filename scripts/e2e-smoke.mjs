@@ -7,8 +7,11 @@ const browser = await puppeteer.launch({
   args: ['--no-sandbox', '--disable-gpu']
 })
 
+const context = browser.defaultBrowserContext()
+await context.overridePermissions(new URL(baseUrl).origin, ['geolocation'])
 const page = await browser.newPage()
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 })
+await page.setGeolocation({ latitude: -22.9068, longitude: -43.1729, accuracy: 25 })
 
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
@@ -30,6 +33,11 @@ try {
 
   await clickButton('Mapa')
   await page.waitForSelector('.map-canvas')
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('.leaflet-tile')].some((tile) => tile instanceof HTMLImageElement && tile.naturalWidth === 256),
+    { timeout: 15_000 }
+  )
+  await page.waitForFunction(() => !document.querySelector('.map-tile-status'), { timeout: 15_000 })
   await page.screenshot({ path: '/tmp/sinaliza-map.png' })
 
   await clickButton('Relatar')
