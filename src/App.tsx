@@ -43,8 +43,9 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import { DEFAULT_CENTER, demoEvents, emergencyNumbers, reportCategories } from './data'
+import { fetchEmergencyServices, fetchNearbyReports, fetchRiskContext, isApiConfigured } from './api'
 import { getContacts, getLocalReports, saveContacts, saveLocalReports } from './storage'
-import type { ReportCategory, RiskLevel, SafetyEvent, Tab, TrustedContact } from './types'
+import type { EmergencyService, ReportCategory, RiskLevel, SafetyEvent, Tab, TrustedContact } from './types'
 
 type Coordinates = [number, number]
 
@@ -57,6 +58,12 @@ const riskColors: Record<RiskLevel, string> = {
   baixo: '#267568',
   moderado: '#df8c2b',
   elevado: '#cc4a3f'
+}
+
+const riskLabels: Record<RiskLevel, string> = {
+  baixo: 'baixa',
+  moderado: 'moderada',
+  elevado: 'elevada'
 }
 
 const markerIcon = L.divIcon({
@@ -96,7 +103,7 @@ function StatusPill({ online }: { online: boolean }) {
 }
 
 function RiskBadge({ level }: { level: RiskLevel }) {
-  return <span className={`risk-badge ${level}`}>{level === 'baixo' ? 'atenção baixa' : `atenção ${level}`}</span>
+  return <span className={`risk-badge ${level}`}>atenção {riskLabels[level]}</span>
 }
 
 function BottomNavigation({ active, onChange }: { active: Tab; onChange: (tab: Tab) => void }) {
@@ -206,12 +213,16 @@ function HomeView({
   events,
   online,
   userLocation,
+  liveData,
+  riskContext,
   setTab,
   openSos
 }: {
   events: SafetyEvent[]
   online: boolean
   userLocation: Coordinates | null
+  liveData: boolean
+  riskContext: { level: RiskLevel | null; message: string } | null
   setTab: (tab: Tab) => void
   openSos: () => void
 }) {
@@ -221,12 +232,14 @@ function HomeView({
       <section className="hero-card">
         <div className="hero-topline">
           <StatusPill online={online} />
-          <span className="demo-label">MVP · dados demonstrativos</span>
+          <span className="demo-label">{liveData ? 'Dados da API · área atual' : 'MVP · dados demonstrativos'}</span>
         </div>
         <p className="eyebrow">Situação ao seu redor</p>
         <h1>Informação para chegar melhor.</h1>
         <p className="hero-copy">
-          A região apresenta <strong>atenção moderada</strong> neste momento. Consulte os sinais antes de sair.
+          {riskContext
+            ? <>{riskContext.level ? <>A região apresenta <strong>atenção {riskLabels[riskContext.level]}</strong>. </> : null}{riskContext.message}</>
+            : <>A região apresenta <strong>atenção moderada</strong> na demonstração. Consulte os sinais antes de sair.</>}
         </p>
         <button className="location-row" onClick={() => setTab('mapa')}>
           <span className="location-icon"><LocateFixed size={19} /></span>
@@ -503,12 +516,14 @@ function EmergencyView({
   userLocation,
   locate,
   contacts,
+  services,
   openSos,
   shareLocation
 }: {
   userLocation: Coordinates | null
   locate: () => void
   contacts: TrustedContact[]
+  services: EmergencyService[]
   openSos: () => void
   shareLocation: () => void
 }) {
@@ -528,7 +543,7 @@ function EmergencyView({
       <section className="section-block emergency-section">
         <div className="section-heading"><div><p className="eyebrow">Serviços oficiais</p><h2>Números de emergência</h2></div></div>
         <div className="phone-list">
-          {emergencyNumbers.map((service) => (
+          {services.map((service) => (
             <a key={service.number} href={`tel:${service.number}`} className="phone-card">
               <span className="phone-number">{service.number}</span>
               <div><strong>{service.label}</strong><small>{service.note}</small></div>
@@ -704,12 +719,19 @@ export default function App() {
   const [isLocating, setIsLocating] = useState(false)
   const [locationAttempted, setLocationAttempted] = useState(false)
   const [localReports, setLocalReports] = useState<SafetyEvent[]>(getLocalReports)
+  const [remoteReports, setRemoteReports] = useState<SafetyEvent[]>([])
+  const [services, setServices] = useState<EmergencyService[]>(emergencyNumbers)
+  const [apiLive, setApiLive] = useState(false)
+  const [riskContext, setRiskContext] = useState<{ level: RiskLevel | null; message: string } | null>(null)
   const [contacts, setContactsState] = useState<TrustedContact[]>(getContacts)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null)
   const [toast, setToast] = useState('')
   const [sosOpen, setSosOpen] = useState(false)
 
-  const events = useMemo(() => [...localReports, ...demoEvents], [localReports])
+  const events = useMemo(
+    () => [...localReports, ...remoteReports, ...(apiLive ? [] : demoEvents)],
+    [apiLive, localReports, remoteReports]
+  )
 
   useEffect(() => {
     const onOnline = () => setOnline(true)
@@ -727,6 +749,35 @@ export default function App() {
       window.removeEventListener('beforeinstallprompt', onInstall)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isApiConfigured) return
+    const controller = new AbortController()
+    fetchEmergencyServices(controller.signal)
+      .then((response) => setServices(response.length ? response : emergencyNumbers))
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!isApiConfigured) return
+    const controller = new AbortController()
+    const [lat, lng] = userLocation ?? DEFAULT_CENTER
+
+    Promise.all([
+      fetchNearbyReports(lat, lng, controller.signal),
+      fetchRiskContext(lat, lng, controller.signal)
+    ]).then(([reports, context]) => {
+      setRemoteReports(reports)
+      setRiskContext({ level: context.level, message: context.message })
+      setApiLive(true)
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      setApiLive(false)
+    })
+
+    return () => controller.abort()
+  }, [userLocation])
 
   function showToast(message: string) {
     setToast(message)
@@ -823,10 +874,10 @@ export default function App() {
         </div>
       </header>
 
-      {tab === 'inicio' && <HomeView events={events} online={online} userLocation={userLocation} setTab={setTab} openSos={() => setSosOpen(true)} />}
+      {tab === 'inicio' && <HomeView events={events} online={online} userLocation={userLocation} liveData={apiLive} riskContext={riskContext} setTab={setTab} openSos={() => setSosOpen(true)} />}
       {tab === 'mapa' && <MapView events={events} userLocation={userLocation} isLocating={isLocating} locationAttempted={locationAttempted} locate={locate} showToast={showToast} />}
       {tab === 'relatar' && <ReportView userLocation={userLocation} locate={locate} onSubmit={addReport} />}
-      {tab === 'emergencia' && <EmergencyView userLocation={userLocation} locate={locate} contacts={contacts} openSos={() => setSosOpen(true)} shareLocation={shareLocation} />}
+      {tab === 'emergencia' && <EmergencyView userLocation={userLocation} locate={locate} contacts={contacts} services={services} openSos={() => setSosOpen(true)} shareLocation={shareLocation} />}
       {tab === 'perfil' && <ProfileView contacts={contacts} setContacts={setContacts} canInstall={Boolean(installPrompt)} install={install} clearData={clearData} showToast={showToast} />}
 
       <BottomNavigation active={tab} onChange={setTab} />

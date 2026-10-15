@@ -16,7 +16,7 @@ export interface SafetyEvent {
   lat: number
   lng: number
   level: RiskLevel
-  source: 'Demonstração' | 'Comunidade' | 'Órgão público'
+  source: 'Demonstração' | 'Comunidade' | 'Órgão público' | 'Imprensa verificada'
   ageMinutes: number
   confidence: 'baixa' | 'moderada' | 'alta'
   confirmations: number
@@ -26,6 +26,12 @@ export interface TrustedContact {
   id: string
   name: string
   phone: string
+}
+
+export interface EmergencyService {
+  number: string
+  label: string
+  note: string
 }
 
 export type Tab = 'inicio' | 'mapa' | 'relatar' | 'emergencia' | 'perfil'
